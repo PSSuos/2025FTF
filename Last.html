@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>충돌 격파</title>
+  <style>
+    body {
+      margin: 0;
+      position: relative;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background: #1d1d1d;
+      overflow: hidden;
+    }
+    svg {
+      background-color: white;
+      filter: drop-shadow(10px 10px 20px rgba(0, 0, 0, 0.5));
+    }
+    #download, #refresh {
+      position: absolute;
+      z-index: 10;
+      font-size: 14px;
+      padding: 8px 12px;
+    }
+    #download {
+      top: 20px;
+      left: 20px;
+    }
+    #refresh {
+      top: 20px;
+      right: 20px;
+      width: 50px;
+      height: 50px;
+      background-color: black;
+      border: none;
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    #refresh:hover {
+      background-color: white;
+      color: black;
+    }
+  </style>
+</head>
+<body>
+  <button id="download">Download</button>
+  <button id="refresh">Re</button>
+
+  <script>
+    const canvasSize = window.innerWidth < 800 ? window.innerWidth : 1200;
+    const numShapes = 150;
+    const svgNS = "http://www.w3.org/2000/svg";
+    const maxSize = canvasSize * 0.8;
+    const minSize = 5;
+    const shapeBounds = [];
+    const shapeData = [];
+
+    const svg = document.createElementNS(svgNS, "svg");
+    svg.setAttribute("width", canvasSize);
+    svg.setAttribute("height", canvasSize);
+    document.body.appendChild(svg);
+
+    const background = document.createElementNS(svgNS, "rect");
+    background.setAttribute("x", 0);
+    background.setAttribute("y", 0);
+    background.setAttribute("width", canvasSize);
+    background.setAttribute("height", canvasSize);
+    background.setAttribute("fill", "white");
+    svg.appendChild(background);
+
+    // 유틸 함수
+    const getRandom = (min, max) => Math.random() * (max - min) + min;
+    const getSkewedSize = () => minSize + (maxSize - minSize) * Math.random() ** 3;
+    const pickAngle = () => Math.floor(getRandom(0, 8)) * 45;
+    const boxesOverlap = (a, b) =>
+      Math.abs(a.cx - b.cx) < (a.w / 2 + b.w / 2) &&
+      Math.abs(a.cy - b.cy) < (a.h / 2 + b.h / 2);
+
+    function drawShape(type, cx, cy, w, h, angle, color, opacity = 1) {
+      const g = document.createElementNS(svgNS, "g");
+      g.setAttribute("transform", `rotate(${angle} ${cx} ${cy})`);
+
+      let shape;
+      if (type === 0) {
+        shape = document.createElementNS(svgNS, "ellipse");
+        shape.setAttribute("cx", cx);
+        shape.setAttribute("cy", cy);
+        shape.setAttribute("rx", w / 2);
+        shape.setAttribute("ry", h / 2);
+      } else if (type === 1) {
+        shape = document.createElementNS(svgNS, "rect");
+        shape.setAttribute("x", cx - w / 2);
+        shape.setAttribute("y", cy - h / 2);
+        shape.setAttribute("width", w);
+        shape.setAttribute("height", h);
+      } else {
+        shape = document.createElementNS(svgNS, "polygon");
+        const points = [
+          `${cx},${cy - h / 2}`,
+          `${cx - w / 2},${cy + h / 2}`,
+          `${cx + w / 2},${cy + h / 2}`
+        ].join(" ");
+        shape.setAttribute("points", points);
+      }
+
+      shape.setAttribute("fill", color);
+      shape.setAttribute("fill-opacity", opacity); // 투명도를 설정
+      g.appendChild(shape);
+      return g;
+    }
+
+    function generateShapes() {
+      shapeBounds.length = 0;
+      shapeData.length = 0;
+
+      // 색상별 그룹 정의
+      const purpleGroup = document.createElementNS(svgNS, "g");
+      purpleGroup.setAttribute("id", "purple-group");
+
+      const orangeGroup = document.createElementNS(svgNS, "g");
+      orangeGroup.setAttribute("id", "orange-group");
+
+      let placed = 0, attempts = 0;
+      while (placed < numShapes && attempts < numShapes * 20) {
+        attempts++;
+        const type = Math.floor(getRandom(0, 3));
+        const base = getSkewedSize();
+        const ratio = getRandom(0.2, 5);
+        const w = base * ratio;
+        const h = base;
+        const angle = pickAngle();
+        const cx = getRandom(w / 2, canvasSize - w / 2);
+        const cy = getRandom(h / 2, canvasSize - h / 2);
+
+        const thisBox = { cx, cy, w, h };
+        let overlapCount = shapeBounds.filter(b => boxesOverlap(thisBox, b)).length;
+        if (overlapCount > 5) continue;
+
+        const shapeColor = Math.random() < 0.55 ? "rgb(0, 0, 255)" : "rgb(255, 165, 0)";
+        const opacity = getRandom(0.1, 0.8); // 투명도를 랜덤하게 설정
+
+        const shape = drawShape(type, cx, cy, w, h, angle, shapeColor, opacity);
+
+        if (shapeColor === "rgb(255, 165, 0)") {
+          orangeGroup.appendChild(shape); // 주황색 도형은 orangeGroup에 추가
+        } else {
+          purpleGroup.appendChild(shape); // 보라색 도형은 purpleGroup에 추가
+        }
+
+        shapeBounds.push(thisBox);
+        shapeData.push({ type, cx, cy, w, h, angle });
+        placed++;
+      }
+
+      // SVG에 색상별 그룹 추가
+      svg.appendChild(purpleGroup);
+      svg.appendChild(orangeGroup);
+    }
+
+    generateShapes();
+
+    document.getElementById("download").addEventListener("click", () => {
+      const data = new XMLSerializer().serializeToString(svg);
+      const blob = new Blob([data], { type: "image/svg+xml" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "shapes_with_color_overlay.svg";
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    document.getElementById("refresh").addEventListener("click", () => {
+      svg.innerHTML = '';
+      svg.appendChild(background);
+      generateShapes();
+    });
+  </script>
+</body>
+</html>
